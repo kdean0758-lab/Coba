@@ -1,0 +1,17 @@
+name = "coba"
+main = "src/_worker.js"
+compatibility_date = "2024-10-01"
+
+[vars]
+PROXY_BANK_URL = ""
+REVERSE_PROXY_TARGET = ""
+DEFAULT_CC = "ID,SG"
+DEFAULT_LIMIT = "50"
+
+[[kv_namespaces]]
+binding = "PROXY_KV"
+id = "REPLACE_WITH_YOUR_NAMESPACE_ID"
+
+# Opsi: aktifkan cron native Cloudflare (misal tiap 6 jam)
+[triggers]
+crons = [ "0 */6 * * *" ]
