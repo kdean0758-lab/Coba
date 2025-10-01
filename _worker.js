@@ -193,3 +193,148 @@ ${list.map(n => `<tr><td>${n.type}</td><td>${n.host}</td><td>${n.port}</td><td>$
 </tbody></table>
 </body></html>`;
 }
+
+/* ------------------ Formatter ------------------ */
+
+function formatSubscription(list, format) {
+  if (format === "clash") {
+    const proxies = list.map(n => {
+      if (n.type === "vless") {
+        return {
+          name: `${(n.cc || "XX")}-vless-${n.host}`,
+          type: "vless",
+          server: n.host,
+          port: n.port,
+          uuid: n.id,
+          tls: !!n.tls,
+          servername: n.sni || n.host,
+        };
+      }
+      if (n.type === "trojan") {
+        return {
+          name: `${(n.cc || "XX")}-trojan-${n.host}`,
+          type: "trojan",
+          server: n.host,
+          port: n.port,
+          password: n.password,
+          sni: n.sni || n.host,
+        };
+      }
+      if (n.type === "ss") {
+        return {
+          name: `${(n.cc || "XX")}-ss-${n.host}`,
+          type: "ss",
+          server: n.host,
+          port: n.port,
+          cipher: n.method,
+          password: n.password,
+        };
+      }
+      return null;
+    }).filter(Boolean);
+    return `proxies:\n${proxies.map(p => `  - ${JSON.stringify(p)}`).join("\n")}\n`;
+  }
+  // default raw
+  return list.map(n => `${n.type} ${n.host}:${n.port} ${n.cc || "XX"}`).join("\n");
+}
+
+/* ------------------ Parser ------------------ */
+
+function parseProxyBank(text) {
+  try {
+    const j = JSON.parse(text);
+    return Array.isArray(j) ? normalizeArray(j) : [];
+  } catch {
+    return text
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(parseLineToNode)
+      .filter(Boolean);
+  }
+}
+
+function normalizeArray(arr) {
+  return arr
+    .map(x => ({
+      type: x.type,
+      host: x.host,
+      port: Number(x.port),
+      cc: (x.cc || "").toUpperCase(),
+      id: x.id,
+      password: x.password,
+      method: x.method,
+      tls: !!x.tls,
+      sni: x.sni,
+    }))
+    .filter(x => x.type && x.host && x.port);
+}
+
+function parseLineToNode(line) {
+  if (line.startsWith("vless://")) return parseVless(line);
+  if (line.startsWith("trojan://")) return parseTrojan(line);
+  if (line.startsWith("ss://")) return parseSs(line);
+  return null;
+}
+
+function parseVless(uri) {
+  try {
+    const noSchema = uri.replace("vless://", "");
+    const [userHost, rest] = noSchema.split("?");
+    const [uuid, hostPort] = userHost.split("@");
+    const [host, port] = hostPort.split(":");
+    const params = new URLSearchParams(rest || "");
+    return {
+      type: "vless",
+      host,
+      port: Number(port),
+      id: uuid,
+      tls: (params.get("security") || "").toLowerCase() === "tls",
+      sni: params.get("sni") || host,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseTrojan(uri) {
+  try {
+    const noSchema = uri.replace("trojan://", "");
+    const [userHost, rest] = noSchema.split("?");
+    const [password, hostPort] = userHost.split("@");
+    const [host, port] = hostPort.split(":");
+    const params = new URLSearchParams(rest || "");
+    return {
+      type: "trojan",
+      host,
+      port: Number(port),
+      password,
+      tls: true,
+      sni: params.get("sni") || host,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseSs(uri) {
+  try {
+    const noSchema = uri.replace("ss://", "");
+    if (noSchema.includes("@")) {
+      const [methodPass, hostPort] = noSchema.split("@");
+      const [method, password] = methodPass.split(":");
+      const [host, portAndTag] = hostPort.split(":");
+      const port = portAndTag.split("#")[0];
+      return {
+        type: "ss",
+        host,
+        port: Number(port),
+        method,
+        password,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
