@@ -1,6 +1,3 @@
-import { parseProxyBank } from "./utils/parser.js";
-import { formatSubscription } from "./utils/format.js";
-
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -44,7 +41,7 @@ export default {
       return new Response(renderList(paged, page), { headers: htmlHeaders() });
     }
 
-    // Cron handler (Cloudflare Triggers): pull sumber -> push ke KV
+    // Cron handler (Cloudflare Triggers)
     if (path === "/_cron") {
       const updated = await syncKvFromSource(env);
       return json({ ok: true, updated });
@@ -53,6 +50,8 @@ export default {
     return json({ error: "Not found" }, 404);
   },
 };
+
+/* ------------------ Helpers ------------------ */
 
 function htmlHeaders() {
   return { "content-type": "text/html; charset=utf-8" };
@@ -85,7 +84,6 @@ a{color:#58a6ff} .card{padding:1rem;border:1px solid #1f2328;border-radius:8px}<
 }
 
 async function loadProxyList(env) {
-  // Prioritas: PROXY_BANK_URL -> KV -> fallback demo
   if (env.PROXY_BANK_URL) {
     const res = await fetch(env.PROXY_BANK_URL);
     const text = await res.text();
@@ -95,7 +93,7 @@ async function loadProxyList(env) {
     const raw = await env.PROXY_KV.get("proxyList");
     if (raw) return JSON.parse(raw);
   }
-  // Fallback minimal demo
+  // fallback demo
   return [
     { type: "vless", host: "zoom.us", port: 443, cc: "ID", id: "00000000-0000-4000-8000-000000000000", tls: true },
     { type: "trojan", host: "cdn.cloudflare.com", port: 443, cc: "SG", password: "pass", tls: true },
@@ -148,3 +146,77 @@ ${list.map(n => `<tr><td>${n.type}</td><td>${n.host}</td><td>${n.port}</td><td>$
 </tbody></table>
 </body></html>`;
 }
+
+/* ------------------ Inline Parser ------------------ */
+
+function parseProxyBank(text) {
+  try {
+    const j = JSON.parse(text);
+    return Array.isArray(j) ? normalizeArray(j) : [];
+  } catch {
+    return text
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(parseLineToNode)
+      .filter(Boolean);
+  }
+}
+
+function normalizeArray(arr) {
+  return arr
+    .map(x => ({
+      type: x.type,
+      host: x.host,
+      port: Number(x.port),
+      cc: (x.cc || "").toUpperCase(),
+      id: x.id,
+      password: x.password,
+      method: x.method,
+      tls: !!x.tls,
+      sni: x.sni,
+    }))
+    .filter(x => x.type && x.host && x.port);
+}
+
+function parseLineToNode(line) {
+  if (line.startsWith("vless://")) return parseVless(line);
+  if (line.startsWith("trojan://")) return parseTrojan(line);
+  if (line.startsWith("ss://")) return parseSs(line);
+  return null;
+}
+
+function parseVless(uri) {
+  try {
+    const noSchema = uri.replace("vless://", "");
+    const [userHost, rest] = noSchema.split("?");
+    const [uuid, hostPort] = userHost.split("@");
+    const [host, port] = hostPort.split(":");
+    const params = new URLSearchParams(rest || "");
+    return {
+      type: "vless",
+      host,
+      port: Number(port),
+      id: uuid,
+      tls: (params.get("security") || "").toLowerCase() === "tls",
+      sni: params.get("sni") || host,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseTrojan(uri) {
+  try {
+    const noSchema = uri.replace("trojan://", "");
+    const [userHost, rest] = noSchema.split("?");
+    const [password, hostPort] = userHost.split("@");
+    const [host, port] = hostPort.split(":");
+    const params = new URLSearchParams(rest || "");
+    return {
+      type: "trojan",
+      host,
+      port: Number(port),
+      password,
+      tls: true,
+      s
