@@ -51,6 +51,3 @@ Ringkas, cepat, dan siap dipakai untuk menyiarkan daftar VLESS/Trojan/Shadowsock
 - Pastikan UUID VLESS valid.
 - Gunakan SNI sesuai host untuk koneksi TLS.
 - Format Clash disederhanakan; sesuaikan jika butuh opsi lanjutan.
-
-## Lisensi
-MIT
