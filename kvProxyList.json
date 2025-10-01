@@ -1,0 +1,5 @@
+[
+  { "type": "vless", "host": "zoom.us", "port": 443, "cc": "ID", "id": "00000000-0000-4000-8000-000000000000", "tls": true, "sni": "zoom.us" },
+  { "type": "trojan", "host": "cdn.cloudflare.com", "port": 443, "cc": "SG", "password": "password", "tls": true, "sni": "cdn.cloudflare.com" },
+  { "type": "ss", "host": "example.com", "port": 80, "cc": "JP", "method": "aes-256-gcm", "password": "pass" }
+]
