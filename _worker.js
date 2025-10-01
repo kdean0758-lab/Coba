@@ -110,10 +110,15 @@ async function syncKvFromSource(env) {
   return { count: list.length };
 }
 
+/* ------------------ Filter & Rendering ------------------ */
+
 function parseQuery(sp, env) {
   return {
     format: sp.get("format"),
-    cc: (sp.get("cc") || env.DEFAULT_CC || "").split(",").filter(Boolean).map(s => s.toUpperCase()),
+    cc: (sp.get("cc") || env.DEFAULT_CC || "")
+      .split(",")
+      .filter(Boolean)
+      .map(s => s.toUpperCase()),
     vpn: (sp.get("vpn") || "").split(",").filter(Boolean),
     port: (sp.get("port") || "").split(",").map(Number).filter(Boolean),
     domain: sp.get("domain"),
@@ -147,76 +152,44 @@ ${list.map(n => `<tr><td>${n.type}</td><td>${n.host}</td><td>${n.port}</td><td>$
 </body></html>`;
 }
 
-/* ------------------ Inline Parser ------------------ */
+/* ------------------ Filter & Rendering ------------------ */
 
-function parseProxyBank(text) {
-  try {
-    const j = JSON.parse(text);
-    return Array.isArray(j) ? normalizeArray(j) : [];
-  } catch {
-    return text
-      .split("\n")
-      .map(line => line.trim())
+function parseQuery(sp, env) {
+  return {
+    format: sp.get("format"),
+    cc: (sp.get("cc") || env.DEFAULT_CC || "")
+      .split(",")
       .filter(Boolean)
-      .map(parseLineToNode)
-      .filter(Boolean);
-  }
+      .map(s => s.toUpperCase()),
+    vpn: (sp.get("vpn") || "").split(",").filter(Boolean),
+    port: (sp.get("port") || "").split(",").map(Number).filter(Boolean),
+    domain: sp.get("domain"),
+    limit: Number(sp.get("limit")) || undefined,
+  };
 }
 
-function normalizeArray(arr) {
-  return arr
-    .map(x => ({
-      type: x.type,
-      host: x.host,
-      port: Number(x.port),
-      cc: (x.cc || "").toUpperCase(),
-      id: x.id,
-      password: x.password,
-      method: x.method,
-      tls: !!x.tls,
-      sni: x.sni,
-    }))
-    .filter(x => x.type && x.host && x.port);
+function applyFilters(list, q) {
+  let out = list.slice();
+  if (q.cc.length) out = out.filter(x => q.cc.includes((x.cc || "").toUpperCase()));
+  if (q.vpn.length) out = out.filter(x => q.vpn.includes(x.type));
+  if (q.port.length) out = out.filter(x => q.port.includes(Number(x.port)));
+  if (q.domain) out = out.filter(x => (x.host || "").includes(q.domain));
+  if (q.limit) out = out.slice(0, q.limit);
+  return out;
 }
 
-function parseLineToNode(line) {
-  if (line.startsWith("vless://")) return parseVless(line);
-  if (line.startsWith("trojan://")) return parseTrojan(line);
-  if (line.startsWith("ss://")) return parseSs(line);
-  return null;
+function paginate(list, page, size) {
+  const start = (page - 1) * size;
+  return list.slice(start, start + size);
 }
 
-function parseVless(uri) {
-  try {
-    const noSchema = uri.replace("vless://", "");
-    const [userHost, rest] = noSchema.split("?");
-    const [uuid, hostPort] = userHost.split("@");
-    const [host, port] = hostPort.split(":");
-    const params = new URLSearchParams(rest || "");
-    return {
-      type: "vless",
-      host,
-      port: Number(port),
-      id: uuid,
-      tls: (params.get("security") || "").toLowerCase() === "tls",
-      sni: params.get("sni") || host,
-    };
-  } catch {
-    return null;
-  }
+function renderList(list, page) {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Daftar — Coba</title>
+<style>body{font-family:system-ui;background:#0b0f14;color:#e6edf3;margin:2rem}table{width:100%;border-collapse:collapse}
+td,th{border:1px solid #1f2328;padding:.5rem}</style></head><body>
+<h2>Halaman ${page}</h2>
+<table><thead><tr><th>Tipe</th><th>Host</th><th>Port</th><th>CC</th></tr></thead><tbody>
+${list.map(n => `<tr><td>${n.type}</td><td>${n.host}</td><td>${n.port}</td><td>${n.cc || "-"}</td></tr>`).join("")}
+</tbody></table>
+</body></html>`;
 }
-
-function parseTrojan(uri) {
-  try {
-    const noSchema = uri.replace("trojan://", "");
-    const [userHost, rest] = noSchema.split("?");
-    const [password, hostPort] = userHost.split("@");
-    const [host, port] = hostPort.split(":");
-    const params = new URLSearchParams(rest || "");
-    return {
-      type: "trojan",
-      host,
-      port: Number(port),
-      password,
-      tls: true,
-      s
