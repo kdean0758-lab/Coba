@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+const fetch = (...args) => import("node-fetch").then(({default: fetch}) => fetch(...args));
 import fs from "fs";
 
 async function main() {
@@ -106,3 +106,4 @@ main().catch(err => {
   console.error(err);
   process.exit(1);
 });
+
