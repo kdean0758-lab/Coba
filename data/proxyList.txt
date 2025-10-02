@@ -1,3 +1,4 @@
-vless://00000000-0000-4000-8000-000000000000@zoom.us:443?security=tls&sni=zoom.us#ID-zoom
-trojan://password@cdn.cloudflare.com:443?sni=cdn.cloudflare.com#SG-cdn
-ss://aes-256-gcm:pass@example.com:80#JP-example
+43.218.77.16,1443,ID,Amazon.com, Inc.
+43.218.77.16,443,ID,Amazon.com, Inc.
+103.6.207.108,8080,ID,PT Pusat Media Indonesia
+36.95.152.58,12137,ID,PT Telekomunikasi Indonesia
