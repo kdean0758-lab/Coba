@@ -152,48 +152,6 @@ ${list.map(n => `<tr><td>${n.type}</td><td>${n.host}</td><td>${n.port}</td><td>$
 </body></html>`;
 }
 
-/* ------------------ Filter & Rendering ------------------ */
-
-function parseQuery(sp, env) {
-  return {
-    format: sp.get("format"),
-    cc: (sp.get("cc") || env.DEFAULT_CC || "")
-      .split(",")
-      .filter(Boolean)
-      .map(s => s.toUpperCase()),
-    vpn: (sp.get("vpn") || "").split(",").filter(Boolean),
-    port: (sp.get("port") || "").split(",").map(Number).filter(Boolean),
-    domain: sp.get("domain"),
-    limit: Number(sp.get("limit")) || undefined,
-  };
-}
-
-function applyFilters(list, q) {
-  let out = list.slice();
-  if (q.cc.length) out = out.filter(x => q.cc.includes((x.cc || "").toUpperCase()));
-  if (q.vpn.length) out = out.filter(x => q.vpn.includes(x.type));
-  if (q.port.length) out = out.filter(x => q.port.includes(Number(x.port)));
-  if (q.domain) out = out.filter(x => (x.host || "").includes(q.domain));
-  if (q.limit) out = out.slice(0, q.limit);
-  return out;
-}
-
-function paginate(list, page, size) {
-  const start = (page - 1) * size;
-  return list.slice(start, start + size);
-}
-
-function renderList(list, page) {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Daftar — Coba</title>
-<style>body{font-family:system-ui;background:#0b0f14;color:#e6edf3;margin:2rem}table{width:100%;border-collapse:collapse}
-td,th{border:1px solid #1f2328;padding:.5rem}</style></head><body>
-<h2>Halaman ${page}</h2>
-<table><thead><tr><th>Tipe</th><th>Host</th><th>Port</th><th>CC</th></tr></thead><tbody>
-${list.map(n => `<tr><td>${n.type}</td><td>${n.host}</td><td>${n.port}</td><td>${n.cc || "-"}</td></tr>`).join("")}
-</tbody></table>
-</body></html>`;
-}
-
 /* ------------------ Formatter ------------------ */
 
 function formatSubscription(list, format) {
