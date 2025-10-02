@@ -1,6 +1,3 @@
-const fetch = (...args) => import("node-fetch").then(({default: fetch}) => fetch(...args));
-import fs from "fs";
-
 async function main() {
   const {
     PROXY_BANK_URL,
@@ -106,4 +103,5 @@ main().catch(err => {
   console.error(err);
   process.exit(1);
 });
+
 
