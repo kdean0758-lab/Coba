@@ -1,5 +1,5 @@
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -23,10 +23,10 @@ export default {
       const q = parseQuery(url.searchParams, env);
       const list = await loadProxyList(env);
       const filtered = applyFilters(list, q);
-      const out = formatSubscription(filtered, q.format || "raw");
+      const out = formatSubscription(filtered, q.format || "raw", env);
       return new Response(out, {
         headers: {
-          "content-type": q.format === "clash" ? "text/plain" : "application/octet-stream",
+          "content-type": "text/plain; charset=utf-8",
         },
       });
     }
@@ -41,7 +41,7 @@ export default {
       return new Response(renderList(paged, page), { headers: htmlHeaders() });
     }
 
-    // Cron handler (Cloudflare Triggers)
+    // Cron handler
     if (path === "/_cron") {
       const updated = await syncKvFromSource(env);
       return json({ ok: true, updated });
@@ -70,18 +70,23 @@ function renderHome(env) {
 <style>body{font-family:system-ui;background:#0b0f14;color:#e6edf3;margin:2rem}
 a{color:#58a6ff} .card{padding:1rem;border:1px solid #1f2328;border-radius:8px}</style></head>
 <body>
-<h1>Coba — Serverless Tunnel</h1>
+<h1>Coba — Serverless Proxy Bank</h1>
 <div class="card">
 <p>Endpoint:</p>
 <ul>
-<li>/api/v1/sub?format=clash&cc=${env.DEFAULT_CC || "ID,SG"}&vpn=vless,trojan,ss&limit=${env.DEFAULT_LIMIT || "50"}</li>
+<li>/api/v1/sub?format=vless</li>
+<li>/api/v1/sub?format=trojan</li>
+<li>/api/v1/sub?format=ss</li>
+<li>/api/v1/sub?format=clash</li>
 <li>/sub/1 — daftar dengan pagination</li>
 <li>/rp/... — reverse proxy (opsional)</li>
 </ul>
-<p>Sumber: ${env.PROXY_BANK_URL ? env.PROXY_BANK_URL : "KV/DEMO"}</p>
+<p>Sumber: ${env.PROXY_BANK_URL || "KV/DEMO"}</p>
 </div>
 </body></html>`;
 }
+
+/* ------------------ Loader ------------------ */
 
 async function loadProxyList(env) {
   if (env.PROXY_BANK_URL) {
@@ -93,12 +98,7 @@ async function loadProxyList(env) {
     const raw = await env.PROXY_KV.get("proxyList");
     if (raw) return JSON.parse(raw);
   }
-  // fallback demo
-  return [
-    { type: "vless", host: "zoom.us", port: 443, cc: "ID", id: "00000000-0000-4000-8000-000000000000", tls: true },
-    { type: "trojan", host: "cdn.cloudflare.com", port: 443, cc: "SG", password: "pass", tls: true },
-    { type: "ss", host: "example.com", port: 80, cc: "JP", method: "aes-256-gcm", password: "p" },
-  ];
+  return [];
 }
 
 async function syncKvFromSource(env) {
@@ -119,9 +119,6 @@ function parseQuery(sp, env) {
       .split(",")
       .filter(Boolean)
       .map(s => s.toUpperCase()),
-    vpn: (sp.get("vpn") || "").split(",").filter(Boolean),
-    port: (sp.get("port") || "").split(",").map(Number).filter(Boolean),
-    domain: sp.get("domain"),
     limit: Number(sp.get("limit")) || undefined,
   };
 }
@@ -129,9 +126,6 @@ function parseQuery(sp, env) {
 function applyFilters(list, q) {
   let out = list.slice();
   if (q.cc.length) out = out.filter(x => q.cc.includes((x.cc || "").toUpperCase()));
-  if (q.vpn.length) out = out.filter(x => q.vpn.includes(x.type));
-  if (q.port.length) out = out.filter(x => q.port.includes(Number(x.port)));
-  if (q.domain) out = out.filter(x => (x.host || "").includes(q.domain));
   if (q.limit) out = out.slice(0, q.limit);
   return out;
 }
@@ -146,154 +140,68 @@ function renderList(list, page) {
 <style>body{font-family:system-ui;background:#0b0f14;color:#e6edf3;margin:2rem}table{width:100%;border-collapse:collapse}
 td,th{border:1px solid #1f2328;padding:.5rem}</style></head><body>
 <h2>Halaman ${page}</h2>
-<table><thead><tr><th>Tipe</th><th>Host</th><th>Port</th><th>CC</th></tr></thead><tbody>
-${list.map(n => `<tr><td>${n.type}</td><td>${n.host}</td><td>${n.port}</td><td>${n.cc || "-"}</td></tr>`).join("")}
+<table><thead><tr><th>Host</th><th>Port</th><th>CC</th><th>Provider</th></tr></thead><tbody>
+${list.map(n => `<tr><td>${n.host}</td><td>${n.port}</td><td>${n.cc}</td><td>${n.provider}</td></tr>`).join("")}
 </tbody></table>
 </body></html>`;
 }
 
-/* ------------------ Formatter ------------------ */
-
-function formatSubscription(list, format) {
-  if (format === "clash") {
-    const proxies = list.map(n => {
-      if (n.type === "vless") {
-        return {
-          name: `${(n.cc || "XX")}-vless-${n.host}`,
-          type: "vless",
-          server: n.host,
-          port: n.port,
-          uuid: n.id,
-          tls: !!n.tls,
-          servername: n.sni || n.host,
-        };
-      }
-      if (n.type === "trojan") {
-        return {
-          name: `${(n.cc || "XX")}-trojan-${n.host}`,
-          type: "trojan",
-          server: n.host,
-          port: n.port,
-          password: n.password,
-          sni: n.sni || n.host,
-        };
-      }
-      if (n.type === "ss") {
-        return {
-          name: `${(n.cc || "XX")}-ss-${n.host}`,
-          type: "ss",
-          server: n.host,
-          port: n.port,
-          cipher: n.method,
-          password: n.password,
-        };
-      }
-      return null;
-    }).filter(Boolean);
-    return `proxies:\n${proxies.map(p => `  - ${JSON.stringify(p)}`).join("\n")}\n`;
-  }
-  // default raw
-  return list.map(n => `${n.type} ${n.host}:${n.port} ${n.cc || "XX"}`).join("\n");
-}
-
-/* ------------------ Parser ------------------ */
+/* ------------------ Parser CSV ------------------ */
 
 function parseProxyBank(text) {
-  try {
-    const j = JSON.parse(text);
-    return Array.isArray(j) ? normalizeArray(j) : [];
-  } catch {
-    return text
-      .split("\n")
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(parseLineToNode)
-      .filter(Boolean);
+  return text
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(l => {
+      const parts = l.split(",");
+      if (parts.length < 4) return null;
+
+      const proxy = parts[0].trim();          // alamat proxy / host
+      const port = Number(parts[1].trim());   // port
+      const cc = (parts[2] || "").trim().toUpperCase(); // kategori negara
+      const server = parts.slice(3).join(",").trim();   // nama server (bisa ada koma)
+
+      return { host: proxy, port, cc, provider: server };
+    })
+    .filter(Boolean);
+}
+
+
+
+/* ------------------ Generators ------------------ */
+
+function toVless(node, env) {
+  return `vless://${env.DEFAULT_UUID}@${node.host}:${node.port}?security=tls&sni=${node.host}#${node.cc}-${node.provider}`;
+}
+
+function toTrojan(node, env) {
+  return `trojan://${env.DEFAULT_TROJAN_PASS}@${node.host}:${node.port}?sni=${node.host}#${node.cc}-${node.provider}`;
+}
+
+function toSs(node, env) {
+  const base = btoa(`${env.DEFAULT_SS_METHOD}:${env.DEFAULT_SS_PASS}`);
+  return `ss://${base}@${node.host}:${node.port}#${node.cc}-${node.provider}`;
+}
+
+/* ------------------ Formatter ------------------ */
+
+function formatSubscription(list, format, env) {
+  if (format === "vless") return list.map(n => toVless(n, env)).join("\n");
+  if (format === "trojan") return list.map(n => toTrojan(n, env)).join("\n");
+  if (format === "ss") return list.map(n => toSs(n, env)).join("\n");
+
+  if (format === "clash") {
+    const proxies = list.map((n, i) => ({
+      name: `${n.cc || "XX"}-${n.host}-${i}`,
+      type: "ss",
+      server: n.host,
+      port: n.port,
+      cipher: env.DEFAULT_SS_METHOD,
+      password: env.DEFAULT_SS_PASS
+    }));
+    return `proxies:\n${proxies.map(p => "  - " + JSON.stringify(p)).join("\n")}\n`;
   }
-}
 
-function normalizeArray(arr) {
-  return arr
-    .map(x => ({
-      type: x.type,
-      host: x.host,
-      port: Number(x.port),
-      cc: (x.cc || "").toUpperCase(),
-      id: x.id,
-      password: x.password,
-      method: x.method,
-      tls: !!x.tls,
-      sni: x.sni,
-    }))
-    .filter(x => x.type && x.host && x.port);
+  return list.map(n => `${n.host}:${n.port} ${n.cc}`).join("\n");
 }
-
-function parseLineToNode(line) {
-  if (line.startsWith("vless://")) return parseVless(line);
-  if (line.startsWith("trojan://")) return parseTrojan(line);
-  if (line.startsWith("ss://")) return parseSs(line);
-  return null;
-}
-
-function parseVless(uri) {
-  try {
-    const noSchema = uri.replace("vless://", "");
-    const [userHost, rest] = noSchema.split("?");
-    const [uuid, hostPort] = userHost.split("@");
-    const [host, port] = hostPort.split(":");
-    const params = new URLSearchParams(rest || "");
-    return {
-      type: "vless",
-      host,
-      port: Number(port),
-      id: uuid,
-      tls: (params.get("security") || "").toLowerCase() === "tls",
-      sni: params.get("sni") || host,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function parseTrojan(uri) {
-  try {
-    const noSchema = uri.replace("trojan://", "");
-    const [userHost, rest] = noSchema.split("?");
-    const [password, hostPort] = userHost.split("@");
-    const [host, port] = hostPort.split(":");
-    const params = new URLSearchParams(rest || "");
-    return {
-      type: "trojan",
-      host,
-      port: Number(port),
-      password,
-      tls: true,
-      sni: params.get("sni") || host,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function parseSs(uri) {
-  try {
-    const noSchema = uri.replace("ss://", "");
-    if (noSchema.includes("@")) {
-      const [methodPass, hostPort] = noSchema.split("@");
-      const [method, password] = methodPass.split(":");
-      const [host, portAndTag] = hostPort.split(":");
-      const port = portAndTag.split("#")[0];
-      return {
-        type: "ss",
-        host,
-        port: Number(port),
-        method,
-        password,
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
